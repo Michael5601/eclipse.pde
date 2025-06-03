@@ -393,6 +393,8 @@ public class ImageBrowserView extends ViewPart implements IImageTarget {
 		scrolledComposite.getParent().setFocus();
 	}
 
+	private final List<ImageElement> elements = new ArrayList<>();
+
 	@Override
 	public synchronized void notifyImage(final ImageElement element) {
 		// make a copy of filter to avoid concurrent modification exception since UI changes mFilters list
@@ -402,8 +404,20 @@ public class ImageBrowserView extends ViewPart implements IImageTarget {
 				return;
 			}
 		}
-		if (imageIndex >= page * maxImages && imageIndex < (page + 1) * maxImages) {
-			mUIJob.addImage(element);
+
+		String fileName = element.getFileName();
+		boolean isSVG = fileName.endsWith(".svg"); //$NON-NLS-1$
+		if (isSVG) {
+			elements.removeIf(e -> e.getFileName().equals(fileName.replace(".svg", ".png"))); //$NON-NLS-1$ //$NON-NLS-2$
+			elements.add(element);
+		} else {
+			elements.add(element);
+		}
+
+		if (isSVG || elements.size() > 3) {
+			if (imageIndex >= page * maxImages && imageIndex < (page + 1) * maxImages) {
+				mUIJob.addImage(element);
+			}
 		}
 		imageIndex++;
 	}
@@ -471,7 +485,7 @@ public class ImageBrowserView extends ViewPart implements IImageTarget {
 
 	private class UpdateUI extends FocusAdapter implements Runnable, SelectionListener {
 
-		Collection<ImageElement> mElements = new LinkedList<>();
+		private final Collection<ImageElement> mElements = new LinkedList<>();
 		String mLastPlugin = ""; //$NON-NLS-1$
 		private Composite mPluginImageContainer = null;
 		private final RowLayout mRowLayout = new RowLayout(SWT.HORIZONTAL);
@@ -483,16 +497,21 @@ public class ImageBrowserView extends ViewPart implements IImageTarget {
 		}
 
 		public synchronized void addImage(final ImageElement element) {
-			mElements.add(element);
-
-			if (mElements.size() == 1) {
+			String fileName = element.getFileName();
+			boolean isSVG = fileName.endsWith(".svg"); //$NON-NLS-1$
+			if (isSVG) {
+				mElements.removeIf(e -> e.getFileName().equals(fileName.replace(".svg", ".png"))); //$NON-NLS-1$ //$NON-NLS-2$
+				mElements.add(element);
+			} else {
+				mElements.add(element);
+			}
+			if (isSVG || mElements.size() > 20) {
 				Display.getDefault().asyncExec(this);
 			}
 		}
 
 		@Override
 		public synchronized void run() {
-
 			if (!mElements.isEmpty()) {
 				for (final ImageElement element : mElements) {
 					if (!mLastPlugin.equals(element.getPlugin())) {
