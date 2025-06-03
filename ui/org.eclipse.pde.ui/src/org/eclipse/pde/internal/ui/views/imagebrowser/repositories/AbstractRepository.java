@@ -55,7 +55,7 @@ public abstract class AbstractRepository extends Job {
 		mTarget = target;
 	}
 
-	private static final String[] KNOWN_EXTENSIONS = new String[] {".gif", ".png"}; //$NON-NLS-1$ //$NON-NLS-2$
+	private static final String[] KNOWN_EXTENSIONS = new String[] { ".gif", ".png", ".svg" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 
 	@Override
 	protected synchronized IStatus run(IProgressMonitor monitor) {

@@ -20,6 +20,8 @@ import static org.eclipse.swt.events.SelectionListener.widgetSelectedAdapter;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -393,20 +395,62 @@ public class ImageBrowserView extends ViewPart implements IImageTarget {
 		scrolledComposite.getParent().setFocus();
 	}
 
+	private final List<ImageElement> elements = Collections.synchronizedList(new ArrayList<>());
+	private boolean done = false;
 	@Override
 	public synchronized void notifyImage(final ImageElement element) {
-		// make a copy of filter to avoid concurrent modification exception since UI changes mFilters list
 		ArrayList<IFilter> filters = new ArrayList<>(mFilters);
 		for (final IFilter filter : filters) {
 			if (!filter.accept(element)) {
 				return;
 			}
 		}
-		if (imageIndex >= page * maxImages && imageIndex < (page + 1) * maxImages) {
-			mUIJob.addImage(element);
+
+		String fileName = element.getFileName();
+		boolean isSVG = fileName.endsWith(".svg"); //$NON-NLS-1$
+		synchronized (elements) {
+			if (imageIndex == 0) {
+				done = false;
+				elements.clear();
+			}
+
+			if (isSVG) {
+				String pngName = fileName.replace(".svg", ".png"); //$NON-NLS-1$ //$NON-NLS-2$
+				boolean removed = elements.removeIf(e -> e.getFileName().equals(pngName));
+				if ((removed && !done)) {
+					imageIndex--;
+				}
+			}
+			elements.add(element);
+			imageIndex++;
+
+			if (!(imageIndex > page * maxImages)) {
+				elements.clear();
+				if (isSVG) {
+					imageIndex--;
+				}
+			}
+
+			if ((imageIndex >= page * maxImages && imageIndex < (page + 1) * maxImages) || done) {
+				if (isSVG || elements.size() > 1) {
+					Iterator<ImageElement> iterator = elements.iterator();
+					while (iterator.hasNext()) {
+						ImageElement imageElement = iterator.next();
+						mUIJob.addImage(imageElement);
+						iterator.remove();
+					}
+				}
+			} else {
+				if (!(isSVG || elements.size() > 1) && imageIndex >= page * maxImages) {
+					imageIndex--;
+					done = true;
+				}
+			}
 		}
-		imageIndex++;
 	}
+
+
+
 
 	@Override
 	public boolean needsMore() {
@@ -484,7 +528,6 @@ public class ImageBrowserView extends ViewPart implements IImageTarget {
 
 		public synchronized void addImage(final ImageElement element) {
 			mElements.add(element);
-
 			if (mElements.size() == 1) {
 				Display.getDefault().asyncExec(this);
 			}
@@ -492,7 +535,6 @@ public class ImageBrowserView extends ViewPart implements IImageTarget {
 
 		@Override
 		public synchronized void run() {
-
 			if (!mElements.isEmpty()) {
 				for (final ImageElement element : mElements) {
 					if (!mLastPlugin.equals(element.getPlugin())) {
