@@ -450,12 +450,11 @@ public class ImageBrowserView extends ViewPart implements IImageTarget {
 		}
 
 		private boolean shouldIncludePNG(ImageElement element) {
-			List<ImageElement> cachedElements = repository.getElementsCache();
 			String correspondingSVGPath = element.getPath().replace(".png", ".svg"); //$NON-NLS-1$ //$NON-NLS-2$
-			for (ImageElement cachedElement : cachedElements) {
-				if (correspondingSVGPath.equals(cachedElement.getPath())) {
-					return checkSVGRejectedByFilters(cachedElement);
-				}
+			removeSelfFromFilters(filters);
+			ImageElement svgElement = repository.pluginContains(element.getFullPlugin(), correspondingSVGPath);
+			if (svgElement != null) {
+				return checkSVGRejectedByFilters(svgElement);
 			}
 			return true;
 		}

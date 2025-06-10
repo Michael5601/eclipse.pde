@@ -102,6 +102,11 @@ public class WorkspaceRepository extends AbstractRepository {
 		return false;
 	}
 
+	@Override
+	public ImageElement pluginContains(String pluginName, String correspondingSVGName) {
+		return null;
+	}
+
 	private void initialize(IProgressMonitor monitor) {
 		IProject[] projects = ResourcesPlugin.getWorkspace().getRoot().getProjects();
 		if (projects != null) {

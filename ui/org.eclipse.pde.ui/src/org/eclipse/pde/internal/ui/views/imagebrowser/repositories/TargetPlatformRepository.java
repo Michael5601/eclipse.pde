@@ -16,11 +16,19 @@
 package org.eclipse.pde.internal.ui.views.imagebrowser.repositories;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -33,12 +41,14 @@ import org.eclipse.pde.core.target.TargetBundle;
 import org.eclipse.pde.internal.ui.PDEPlugin;
 import org.eclipse.pde.internal.ui.PDEUIMessages;
 import org.eclipse.pde.internal.ui.views.imagebrowser.IImageTarget;
+import org.eclipse.pde.internal.ui.views.imagebrowser.ImageElement;
 import org.eclipse.ui.PlatformUI;
 
 public class TargetPlatformRepository extends AbstractRepository {
 
 	private List<TargetBundle> fBundles = null;
 	private final boolean fUseCurrent;
+	private List<File> pluginFiles = new ArrayList<>();
 
 	/**
 	 * Creates a new target platform repository.  If useCurrent is <code>true</code>
@@ -64,9 +74,9 @@ public class TargetPlatformRepository extends AbstractRepository {
 			TargetBundle bundle = fBundles.remove(fBundles.size() - 1);
 			URI location = bundle.getBundleInfo().getLocation();
 			File file = new File(location);
+			pluginFiles.add(file);
 			if (isJar(file)) {
 				searchJarFile(file, monitor);
-
 			} else if (file.isDirectory()) {
 				searchDirectory(file, monitor);
 			}
@@ -129,6 +139,75 @@ public class TargetPlatformRepository extends AbstractRepository {
 	}
 
 	@Override
+	public ImageElement pluginContains(String pluginFile, String fileName) {
+		for (File currentPluginFile : pluginFiles) {
+			if (currentPluginFile.getName().equals(pluginFile)) {
+				if (isJar(currentPluginFile)) {
+					return jarFileContains(currentPluginFile, fileName);
+
+				} else if (currentPluginFile.isDirectory()) {
+					return directoryContains(currentPluginFile, fileName);
+				}
+			}
+		}
+		return null;
+	}
+
+	private ImageElement jarFileContains(File pluginFile, final String fileName) {
+		try (ZipFile zipFile = new ZipFile(pluginFile)) {
+			Enumeration<? extends ZipEntry> entries = zipFile.entries();
+			while ((entries.hasMoreElements())) {
+				ZipEntry entry = entries.nextElement();
+				if (entry.getName().replace(".png", ".svg").equals(fileName)) { //$NON-NLS-1$ //$NON-NLS-2$
+					return new ImageElement(() -> createImageData(pluginFile, entry), pluginFile.getName(),
+							entry.getName());
+				}
+			}
+		} catch (IOException e) {
+			PDEPlugin.log(e);
+		}
+		return null;
+	}
+
+	private ImageElement directoryContains(File directory, final String fileName) {
+		File manifest = new File(directory, "META-INF/MANIFEST.MF"); //$NON-NLS-1$
+		if (manifest.exists()) {
+			try {
+				Optional<String> name = getPluginName(new FileInputStream(manifest));
+				if (!name.isPresent()) {
+					return null;
+				}
+				String pluginName = name.get();
+				int directoryPathLength = directory.getAbsolutePath().length();
+
+				Collection<File> locations = new HashSet<>();
+				locations.add(directory);
+				do {
+					File next = locations.iterator().next();
+					locations.remove(next);
+
+					for (File resource : next.listFiles()) {
+						if (resource.isDirectory()) {
+							locations.add(resource);
+
+						} else {
+							if (isImage(resource) && resource.getName().replace(".png", ".svg").equals(fileName)) { //$NON-NLS-1$ //$NON-NLS-2$
+								return new ImageElement(() -> createImageData(resource), pluginName,
+										resource.getAbsolutePath().substring(directoryPathLength));
+							}
+						}
+					}
+
+				} while ((!locations.isEmpty()));
+			} catch (IOException e) {
+				// could not read manifest
+				PDEPlugin.log(e);
+			}
+		}
+		return null;
+	}
+
+	@Override
 	public String toString() {
 		if (!fUseCurrent) {
 			return PDEUIMessages.TargetPlatformRepository_RunningPlatform;
@@ -153,5 +232,4 @@ public class TargetPlatformRepository extends AbstractRepository {
 
 		return super.toString();
 	}
-
 }

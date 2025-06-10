@@ -154,6 +154,8 @@ public abstract class AbstractRepository extends Job {
 		}
 	}
 
+	public abstract ImageElement pluginContains(String pluginFile, String correspondingSVGName);
+
 	protected void searchDirectory(File directory, final IProgressMonitor monitor) {
 		File manifest = new File(directory, "META-INF/MANIFEST.MF"); //$NON-NLS-1$
 		if (manifest.exists()) {
